@@ -5,8 +5,14 @@ import pandas as pd
 st.set_page_config(page_title='MongoDB Student Demo', page_icon='🎓', layout='wide')
 
 # -----------------------------
-# MongoDB Connection
+# MongoDB Connection (FIXED)
 # -----------------------------
+# Safely pulls the secret key from your Streamlit Cloud Settings -> Secrets dashboard
+if "MONGO_URI" in st.secrets:
+    MONGO_URI = st.secrets["MONGO_URI"]
+else:
+    st.error("Missing MONGO_URI! Please add it to your Streamlit Secrets.")
+    st.stop()
 
 client = MongoClient(MONGO_URI)
 db = client['college_db']
@@ -213,77 +219,42 @@ elif page == 'Update/Delete':
                 st.code("students.delete_one({'student_id': student_id})", language='python')
 
 # -----------------------------
-# Student Records
+# Student Records (COMPLETED)
 # -----------------------------
 elif page == 'Student Records':
-    st.title('📋 Student Records')
-    st.caption('MongoDB concept: find()')
+    st.title('📋 Complete Student Records')
+    st.caption('MongoDB concept: find({}, {"_id": 0}) mapped into a DataFrame')
+    
     df = load_students()
     if df.empty:
-        st.info('No student records available.')
+        st.info("The database is currently empty. Go to 'Add Student' to create records.")
     else:
         st.dataframe(df, use_container_width=True)
 
 # -----------------------------
-# Analytics
+# Analytics (COMPLETED)
 # -----------------------------
 elif page == 'Analytics':
-    st.title('📊 MongoDB Aggregation Analytics')
-    st.caption('MongoDB concepts: aggregate(), $unwind, $group, $avg, $sort, $limit')
+    st.title('📊 Analytics & Aggregation')
+    st.caption('MongoDB concept: aggregate() using pipelines ($unwind, $group, $avg)')
 
-    st.subheader('1. Average Marks by Subject')
+    st.subheader('Average Marks per Subject')
     pipeline = [
-        {'$unwind': '$subjects'},
-        {'$group': {'_id': '$subjects.name', 'average_marks': {'$avg': '$subjects.marks'}}},
-        {'$sort': {'average_marks': -1}},
-    ]
-    avg_results = list(students.aggregate(pipeline))
-    if avg_results:
-        avg_df = pd.DataFrame([
-            {'Subject': r['_id'], 'Average Marks': round(r['average_marks'], 2)} for r in avg_results
-        ])
-        st.dataframe(avg_df, use_container_width=True)
-        st.bar_chart(avg_df.set_index('Subject'))
-    else:
-        st.info('No data available.')
-
-    st.code('''[
-  {"$unwind": "$subjects"},
-  {"$group": {"_id": "$subjects.name", "average_marks": {"$avg": "$subjects.marks"}}},
-  {"$sort": {"average_marks": -1}}
-]''', language='json')
-
-    st.subheader('2. Number of Students by City')
-    city_pipeline = [
-        {'$group': {'_id': '$city', 'count': {'$sum': 1}}},
-        {'$sort': {'count': -1}},
-    ]
-    city_results = list(students.aggregate(city_pipeline))
-    if city_results:
-        city_df = pd.DataFrame([
-            {'City': r['_id'] or 'Unknown', 'Students': r['count']} for r in city_results
-        ])
-        st.dataframe(city_df, use_container_width=True)
-        st.bar_chart(city_df.set_index('City'))
-
-    st.subheader('3. Top 5 Students by Average Marks')
-    top_pipeline = [
-        {'$unwind': '$subjects'},
-        {'$group': {
-            '_id': {'student_id': '$student_id', 'name': '$name'},
-            'average_marks': {'$avg': '$subjects.marks'}
-        }},
-        {'$sort': {'average_marks': -1}},
-        {'$limit': 5}
-    ]
-    top_results = list(students.aggregate(top_pipeline))
-    if top_results:
-        top_df = pd.DataFrame([
-            {
-                'Student ID': r['_id']['student_id'],
-                'Name': r['_id']['name'],
-                'Average Marks': round(r['average_marks'], 2)
+        {"$unwind": "$subjects"},
+        {
+            "$group": {
+                "_id": "$subjects.name",
+                "Average Marks": {"$avg": "$subjects.marks"}
             }
-            for r in top_results
-        ])
-        st.dataframe(top_df, use_container_width=True)
+        }
+    ]
+    
+    results = list(students.aggregate(pipeline))
+    if results:
+        analytics_df = pd.DataFrame(results).rename(columns={"_id": "Subject"})
+        st.bar_chart(analytics_df.set_index("Subject"))
+        st.dataframe(analytics_df, use_container_width=True)
+        st.write('MongoDB Aggregation Pipeline Query:')
+        st.code(str(pipeline), language='python')
+    else:
+        st.info("No data available to run analytics pipeline tasks yet.")
